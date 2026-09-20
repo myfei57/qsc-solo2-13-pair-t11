@@ -66,6 +66,10 @@ _ENV_FIELDS: dict[str, Any] = {
     "furnace_purge_seconds": float,
     "furnace_min_smelt_dwell_seconds": float,
     "furnace_transition_timeout_seconds": float,
+    "safety_default_max_dwell_seconds": float,
+    "safety_max_dwell_seconds": float,
+    "safety_overstay_grace_seconds": float,
+    "safety_pass_valid_seconds": float,
 }
 
 
@@ -120,6 +124,12 @@ class Settings:
     furnace_purge_seconds: float = 15.0
     furnace_min_smelt_dwell_seconds: float = 45.0
     furnace_transition_timeout_seconds: float = 600.0
+
+    # 高温区人员安全：默认/上限滞留时长、超时宽限与批条有效期。
+    safety_default_max_dwell_seconds: float = 1800.0
+    safety_max_dwell_seconds: float = 7200.0
+    safety_overstay_grace_seconds: float = 0.0
+    safety_pass_valid_seconds: float = 28800.0
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None, **overrides: Any) -> "Settings":
@@ -241,6 +251,26 @@ class Settings:
                     "timeout": self.furnace_transition_timeout_seconds,
                     "purge": self.furnace_purge_seconds,
                 },
+            )
+        if self.safety_default_max_dwell_seconds <= 0:
+            raise ValidationError(
+                "默认滞留时长必须为正", details={"dwell": self.safety_default_max_dwell_seconds}
+            )
+        if self.safety_max_dwell_seconds < self.safety_default_max_dwell_seconds:
+            raise ValidationError(
+                "滞留时长上限不得小于默认值",
+                details={
+                    "max": self.safety_max_dwell_seconds,
+                    "default": self.safety_default_max_dwell_seconds,
+                },
+            )
+        if self.safety_overstay_grace_seconds < 0:
+            raise ValidationError(
+                "超时宽限不能为负", details={"grace": self.safety_overstay_grace_seconds}
+            )
+        if self.safety_pass_valid_seconds <= 0:
+            raise ValidationError(
+                "批条有效期必须为正", details={"valid": self.safety_pass_valid_seconds}
             )
 
     def with_root(self, root: Path | str) -> "Settings":

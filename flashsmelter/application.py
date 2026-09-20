@@ -21,6 +21,7 @@ from .ns import Namespace
 from .oxygen import OxygenSystem
 from .params import Params
 from .runtime import Clock, Generation, Metrics, RuntimeContext
+from .safety import LocalAccessControl, LocalBroadcast, PersonnelSafety
 from .settler import Settler
 from .slag import SlagTap
 from .store import DurableStore
@@ -81,6 +82,9 @@ class Application:
         self.slag.bind_matte(self.matte)
         self.matte.bind_converter(self.conv)
         self.oxygen.bind_feed_port(self.conc)
+        self.safety = PersonnelSafety(
+            ctx, broadcast=LocalBroadcast(ctx), access=LocalAccessControl(ctx)
+        )
         self.components: tuple[Component, ...] = (
             self.furnace,
             self.burner,
@@ -91,6 +95,7 @@ class Application:
             self.matte,
             self.conv,
             self.waste,
+            self.safety,
         )
         self._by_name: dict[str, Component] = {component.name: component for component in self.components}
 
@@ -516,6 +521,123 @@ class Application:
                 drum_level=params.number("drum_level", minimum=0.0, maximum=1.0),
                 exhaust_temp_c=params.number("exhaust_temp_c", minimum=0.0),
                 tube_leak=params.boolean("tube_leak", required=False, default=False),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("safety.register_person")
+        def _safety_register_person(params: Params) -> Mapping[str, Any]:
+            return self.safety.register_person(
+                params.text("actor", required=False, default="control-room"),
+                person_id=params.text("person_id"),
+                name=params.text("name"),
+                role=params.text("role"),
+                quals=params.text("quals", required=False, default=""),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("safety.deregister_person")
+        def _safety_deregister_person(params: Params) -> Mapping[str, Any]:
+            return self.safety.deregister_person(
+                params.text("actor", required=False, default="control-room"),
+                person_id=params.text("person_id"),
+                note=params.text("note"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("safety.approve_entry")
+        def _safety_approve_entry(params: Params) -> Mapping[str, Any]:
+            return self.safety.approve_entry(
+                params.text("actor", required=False, default="control-room"),
+                person_id=params.text("person_id"),
+                zone=params.text("zone"),
+                reason=params.text("reason"),
+                max_dwell_seconds=params.optional_number("max_dwell_seconds", minimum=1.0),
+                valid_seconds=params.optional_number("valid_seconds", minimum=1.0),
+                allow_restricted=params.boolean("allow_restricted", required=False, default=False),
+                pass_id=params.optional_text("pass_id"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("safety.revoke_pass")
+        def _safety_revoke_pass(params: Params) -> Mapping[str, Any]:
+            return self.safety.revoke_pass(
+                params.text("actor", required=False, default="control-room"),
+                pass_id=params.text("pass_id"),
+                note=params.text("note"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("safety.enter")
+        def _safety_enter(params: Params) -> Mapping[str, Any]:
+            return self.safety.enter(
+                params.text("actor", required=False, default="gate-controller"),
+                person_id=params.text("person_id"),
+                pass_id=params.text("pass_id"),
+                zone=params.text("zone"),
+                gate=params.text("gate", required=False, default="gate-1"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("safety.exit")
+        def _safety_exit(params: Params) -> Mapping[str, Any]:
+            return self.safety.exit(
+                params.text("actor", required=False, default="gate-controller"),
+                person_id=params.text("person_id"),
+                gate=params.text("gate", required=False, default="gate-1"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("safety.report_position")
+        def _safety_report_position(params: Params) -> Mapping[str, Any]:
+            return self.safety.report_position(
+                params.text("actor", required=False, default="positioning"),
+                person_id=params.text("person_id"),
+                zone=params.text("zone"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("safety.sos")
+        def _safety_sos(params: Params) -> Mapping[str, Any]:
+            return self.safety.sos(
+                params.text("actor", required=False, default="help-button"),
+                person_id=params.text("person_id"),
+                zone=params.optional_text("zone"),
+                note=params.text("note", required=False, default=""),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("safety.sweep")
+        def _safety_sweep(params: Params) -> Mapping[str, Any]:
+            return self.safety.sweep(
+                params.text("actor", required=False, default="control-system"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("safety.acknowledge")
+        def _safety_acknowledge(params: Params) -> Mapping[str, Any]:
+            return self.safety.acknowledge(
+                params.text("actor", required=False, default="control-room"),
+                alarm_id=params.text("alarm_id"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("safety.resolve")
+        def _safety_resolve(params: Params) -> Mapping[str, Any]:
+            return self.safety.resolve(
+                params.text("actor", required=False, default="control-room"),
+                alarm_id=params.text("alarm_id"),
+                note=params.text("note"),
                 correlation_id=params.optional_text("correlation_id"),
                 expected_generation=params.optional_number("expected_generation"),
             )
