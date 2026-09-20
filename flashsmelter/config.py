@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Mapping
@@ -15,6 +16,8 @@ from typing import Any, Mapping
 from .errors import ConfigurationError, ValidationError
 
 ENV_PREFIX = "FLASHSMELTER_"
+
+_ZONE_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$")
 
 
 def _read_env(environ: Mapping[str, str]) -> dict[str, Any]:
@@ -66,6 +69,10 @@ _ENV_FIELDS: dict[str, Any] = {
     "furnace_purge_seconds": float,
     "furnace_min_smelt_dwell_seconds": float,
     "furnace_transition_timeout_seconds": float,
+    "safety_default_max_dwell_seconds": float,
+    "safety_max_dwell_cap_seconds": float,
+    "safety_permit_valid_seconds": float,
+    "safety_forbidden_zones": str,
 }
 
 
@@ -120,6 +127,12 @@ class Settings:
     furnace_purge_seconds: float = 15.0
     furnace_min_smelt_dwell_seconds: float = 45.0
     furnace_transition_timeout_seconds: float = 600.0
+
+    # 高温区人员安全：停留时长默认值与上限、许可有效期（同为默认值与上限）、禁区清单。
+    safety_default_max_dwell_seconds: float = 1800.0
+    safety_max_dwell_cap_seconds: float = 7200.0
+    safety_permit_valid_seconds: float = 28800.0
+    safety_forbidden_zones: str = "tap-face,reactor-top"
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None, **overrides: Any) -> "Settings":
@@ -242,6 +255,31 @@ class Settings:
                     "purge": self.furnace_purge_seconds,
                 },
             )
+        if self.safety_default_max_dwell_seconds <= 0:
+            raise ValidationError(
+                "人员默认停留时长必须为正",
+                details={"default": self.safety_default_max_dwell_seconds},
+            )
+        if self.safety_max_dwell_cap_seconds < self.safety_default_max_dwell_seconds:
+            raise ValidationError(
+                "人员停留时长上限不得低于默认值",
+                details={
+                    "cap": self.safety_max_dwell_cap_seconds,
+                    "default": self.safety_default_max_dwell_seconds,
+                },
+            )
+        if self.safety_permit_valid_seconds <= 0:
+            raise ValidationError(
+                "进入许可有效期必须为正", details={"valid": self.safety_permit_valid_seconds}
+            )
+        forbidden_zones = [
+            zone.strip() for zone in self.safety_forbidden_zones.split(",") if zone.strip()
+        ]
+        if not forbidden_zones:
+            raise ValidationError("禁区清单不能为空")
+        for zone in forbidden_zones:
+            if not _ZONE_TOKEN_PATTERN.match(zone):
+                raise ValidationError("禁区标识不合法", details={"zone": zone})
 
     def with_root(self, root: Path | str) -> "Settings":
         updated = replace(self, root=Path(root))

@@ -75,6 +75,22 @@ class SlagPort(Protocol):
     def status(self) -> Mapping[str, Any]: ...
 
 
+@runtime_checkable
+class BroadcastPort(Protocol):
+    """广播联动：报警触发时向指定区域播报。"""
+
+    def announce(self, message: str, *, zone: str, level: str, actor: str) -> Mapping[str, Any]: ...
+
+
+@runtime_checkable
+class AccessControlPort(Protocol):
+    """门禁联动：按区域切换门禁模式（常态/封锁/疏散）。"""
+
+    def set_mode(self, zone: str, mode: str, *, reason: str, actor: str) -> Mapping[str, Any]: ...
+
+    def modes(self) -> dict[str, str]: ...
+
+
 __all__ = [
     "BurnerPort",
     "FeedPort",
@@ -84,4 +100,6 @@ __all__ = [
     "MattePort",
     "ConverterPort",
     "SlagPort",
+    "BroadcastPort",
+    "AccessControlPort",
 ]
